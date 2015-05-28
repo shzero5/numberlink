@@ -1,8 +1,11 @@
 package main
 
 import "fmt"
+import "os"
+import "strconv"
 import "math/rand"
 import "time"
+import "strings"
 
 var (
 	SIGMA = [92]rune{'0', '1', '2', '3', '4', '5', '6', '7', '8', '9', 'a', 'b', 'c', 'd', 'e', 'f', 'g', 'h', 'i', 'j', 'k', 'l', 'm', 'n', 'o', 'p', 'q', 'r', 's', 't', 'u', 'v', 'w', 'x', 'y', 'z', 'A', 'B', 'C', 'D', 'E', 'F', 'G', 'H', 'I', 'J', 'K', 'L', 'M', 'N', 'O', 'P', 'Q', 'R', 'S', 'T', 'U', 'V', 'W', 'X', 'Y', 'Z', '!', '"', '$', '%', '&', '\'', '(', ')', '*', '+', ',', '-', '/', ':', ';', '<', '=', '>', '?', '@', '[', '\\', ']', '^', '_', '`', '{', '|', '}', '~'}
@@ -31,16 +34,17 @@ func square(x int) int {
 //    much as possible
 // 6) The puzzle is printed by replacing all positions that aren't flow-heads
 //    with a .
-func Generate(width, height int) ([]string, []string, error) {
+func Generate(width, height int) [][]int {
 	if width == 0 || height == 0 || width == 1 && height == 1 {
-		return nil, nil, fmt.Errorf("Error: Requires bigger paper size")
+		return nil
 	}
 	rand.Seed(time.Now().UTC().UnixNano())
 	table := tile(width, height)
 	shuffle(table)
 	oddCorner(table)
+	oddDomino(table)
 	findFlows(table)
-	return print(table)
+	return table
 }
 
 func print(table [][]int) ([]string, []string, error) {
@@ -137,16 +141,46 @@ func oddCorner(table [][]int) {
 	}
 }
 
+func oddDomino(table [][]int) {
+	width, height := len(table[0]), len(table)
+	for y := 0; y < height; y++ {
+		for x := 0; x < width; x++ {
+			if inside(x+2, y+1, width, height) {
+				if table[y][x] == table[y+1][x] && table[y][x+1] == table[y+1][x+1] && table[y][x+2] == table[y+1][x+2] && table[y][x] != table[y][x+1] && table[y][x+1] != table[y][x+2] {
+					if rand.Intn(1) == 0 {
+						table[y][x+1] = table[y][x]
+						table[y][x+2] = table[y][x]
+						table[y+1][x] = table[y+1][x+2]
+						table[y+1][x+1] = table[y+1][x+2]
+					} else {
+						table[y][x+1] = table[y][x]
+						table[y+1][x+1] = table[y][x+2]
+					}
+				}
+			}
+			/*if inside(x+1, y+2, width, height) {
+				if table[y][x] == table[y][x+1] && table[y+1][x] == table[y+1][x+1] && table[y+2][x] == table[y+2][x+1] && table[y][x] != table[y+1][x] && table[y+1][x] != table[y+2][x] {
+					table[y+1][x] = table[y][x]
+					table[y+1][x+1] = table[y+2][x]
+				}
+			}*/
+		}
+	}
+}
+
 func findFlows(table [][]int) {
 	width, height := len(table[0]), len(table)
+	//for i := 0; i < 10; i++ {
 	for _, p := range rand.Perm(width * height) {
 		x, y := p%width, p/width
 		if isFlowHead(x, y, table) {
 			layFlow(x, y, table)
 		}
 	}
+	//}
 }
 
+// 基点が否かを判定
 func isFlowHead(x, y int, table [][]int) bool {
 	width, height := len(table[0]), len(table)
 	degree := 0
@@ -247,4 +281,126 @@ func flatten(table [][]int) int {
 		}
 	}
 	return -alpha - 1
+}
+
+func member(n int, xs []int) bool {
+    for _, x := range xs {
+        if n == x { return true }
+    }
+    return false
+}
+
+func removeDup(xs []int) []int {
+    ys := make([]int, 0, len(xs))
+    for _, x := range xs {
+        if !member(x, ys) {
+            ys = append(ys, x)
+        }
+    }
+    return ys
+}
+
+func isValid(pzzl [][]int) bool {
+	width, height := len(pzzl[0]), len(pzzl)
+	for y0 := 0; y0 < height; y0++ {
+		var nums []int
+		for x0 := 0; x0 < width; x0++ {
+			if isFlowHead(x0, y0, pzzl) {
+				nums = append(nums, pzzl[y0][x0])
+			}
+			for i := 0; i < 4; i++ {
+				x1, y1 := x0+DX[i], y0+DY[i]
+				if inside(x1, y1, width, height) && !(x1 == x0 && y1 == y0) && pzzl[y0][x0] == pzzl[y1][x1] {
+					if isFlowHead(x0, y0, pzzl) && isFlowHead(x1, y1, pzzl) {
+						return false
+					}
+				}
+			}
+		}
+		subnums := removeDup(nums)
+		if len(nums) != len(subnums) {
+			return false
+		}
+	}
+	return true
+}
+
+func isValidNumber(pzzl []string) bool {
+	maxNum := 0
+	for _, line := range pzzl {
+		chars := strings.Split(line, "")
+		for _, char := range chars {
+			if char != "." {
+				i, _ := strconv.Atoi(char)
+				if i >= 9 {
+					return false
+				}
+				if i > maxNum {
+					maxNum = i
+				}
+			}
+		}
+	}
+	return maxNum >= 2
+}
+
+func displayPuzzle(pzzl []string) {
+	fmt.Print("[")
+	flag1 := true
+	for _, line := range pzzl {
+		if flag1 {
+			flag1 = false
+		} else {
+			fmt.Print(",")
+		}
+		fmt.Print("[")
+		chars := strings.Split(line, "")
+		flag2 := true
+		for _, char := range chars {
+			if flag2 {
+				flag2 = false
+			} else {
+				fmt.Print(",")
+			}
+			if char == "." {
+				fmt.Print("0")
+			} else {
+				i, _ := strconv.Atoi(char)
+				fmt.Print(i+1)
+			}
+		}
+		fmt.Print("]")
+	}
+	fmt.Println("],")
+}
+
+func gen(size int) {
+	table := Generate(size, size)
+	pzzl, _, _ := print(table)
+
+	for !isValid(table) || !isValidNumber(pzzl) {
+		table = Generate(size, size)
+		pzzl, _, _ = print(table)
+	}
+
+	displayPuzzle(pzzl)
+
+	/*if err != nil {
+		fmt.Fprintf(os.Stderr, "%s\n", err.Error())
+		os.Exit(1)
+	} else {
+		fmt.Println(len(pzzl[0]), len(pzzl))
+		for _, line := range pzzl {
+			fmt.Println(line)
+		}
+	}*/
+	return
+}
+
+
+func main() {
+	size, _ := strconv.Atoi(os.Args[1])
+	for i := 0; i < 600; i++ {
+		gen(size)
+	}
 }
